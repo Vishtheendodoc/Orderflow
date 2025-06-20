@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Flow Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
+            color: #ffffff;
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+
+        .dashboard-header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .dashboard-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: linear-gradient(45deg, #00d4aa, #00a8ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            background: rgba(0, 212, 170, 0.2);
+            border: 1px solid rgba(0, 212, 170, 0.3);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #00d4aa;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .main-container {
+            padding: 2rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #00d4aa;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 1rem;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.2s ease;
+        }
+
+        .metric-card:hover {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-label {
+            font-size: 0.8rem;
+            opacity: 0.7;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .signal-indicator {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            animation: glow 2s infinite alternate;
+        }
+
+        .signal-bullish {
+            background: linear-gradient(45deg, #00ff88, #00cc6a);
+            color: #003d1a;
+            box-shadow: 0 4px 20px rgba(0, 255, 136, 0.3);
+        }
+
+        .signal-bearish {
+            background: linear-gradient(45deg, #ff4757, #ff3742);
+            color: #ffffff;
+            box-shadow: 0 4px 20px rgba(255, 71, 87, 0.3);
+        }
+
+        .signal-neutral {
+            background: linear-gradient(45deg, #ffa502, #ff6348);
+            color: #ffffff;
+            box-shadow: 0 4px 20px rgba(255, 165, 2, 0.3);
+        }
+
+        @keyframes glow {
+            from { box-shadow: 0 4px 20px rgba(0, 255, 136, 0.2); }
+            to { box-shadow: 0 4px 30px rgba(0, 255, 136, 0.4); }
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 1rem;
+        }
+
+        .order-book {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .book-side {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 1rem;
+        }
+
+        .book-header {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            text-align: center;
+            padding: 0.5rem;
+            border-radius: 8px;
+        }
+
+        .bid-header {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+        }
+
+        .ask-header {
+            background: rgba(255, 71, 87, 0.2);
+            color: #ff4757;
+        }
+
+        .book-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            padding: 0.3rem 0.5rem;
+            border-radius: 6px;
+            margin-bottom: 0.2rem;
+            font-size: 0.9rem;
+            transition: background 0.2s ease;
+        }
+
+        .book-row:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .price {
+            font-weight: 600;
+        }
+
+        .quantity {
+            text-align: right;
+            opacity: 0.8;
+        }
+
+        .controls {
+            grid-column: 1 / -1;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .control-label {
+            font-size: 0.8rem;
+            opacity: 0.7;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        input, select, button {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            color: #ffffff;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #00d4aa;
+            box-shadow: 0 0 0 2px rgba(0, 212, 170, 0.2);
+        }
+
+        button {
+            background: linear-gradient(45deg, #00d4aa, #00a8ff);
+            border: none;
+            color: #ffffff;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 212, 170, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .large-orders {
+            background: rgba(255, 165, 2, 0.1);
+            border: 1px solid rgba(255, 165, 2, 0.3);
+            border-radius: 8px;
+            padding: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .alert-banner {
+            position: fixed;
+            top: 80px;
+            right: 2rem;
+            padding: 1rem 1.5rem;
+            border-radius: 12px;
+            font-weight: 600;
+            z-index: 1000;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .alert-banner.show {
+            transform: translateX(0);
+        }
+
+        .timestamp {
+            font-size: 0.7rem;
+            opacity: 0.6;
+            margin-top: 0.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .main-container {
+                grid-template-columns: 1fr;
+                padding: 1rem;
+            }
+            
+            .dashboard-header {
+                padding: 1rem;
+                flex-direction: column;
+                gap: 1rem;
+            }
+            
+            .metric-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        select#securityIdDropdown {
+            background-color: #1e1e2f;
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 0.5rem;
+            font-size: 0.9rem;
+            border-radius: 8px;
+        }
+
+        #exchange {
+            background-color: #1e1e2f;
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 0.5rem;
+            font-size: 0.9rem;
+            border-radius: 8px;
+            width: 100%;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+        }
+
+        #exchange option {
+            background-color: #1e1e2f;
+            color: #ffffff;
+        }
+
+        .delta-analysis {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .delta-analysis .metric-card {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            padding: 0.8rem;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.2s ease;
+        }
+
+        .delta-analysis .metric-card:hover {
+            background: rgba(255, 255, 255, 0.12);
+            transform: translateY(-2px);
+        }
+
+        .delta-analysis .metric-value {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 0.3rem;
+        }
+
+        .delta-analysis .metric-label {
+            font-size: 0.75rem;
+            opacity: 0.7;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Volume spike alert styling */
+        .signal-volume_spike {
+            background: linear-gradient(45deg, #9c27b0, #673ab7);
+            color: #ffffff;
+            box-shadow: 0 4px 20px rgba(156, 39, 176, 0.3);
+        }
+
+        /* Enhanced chart container for better visibility */
+        .chart-container {
+            position: relative;
+            height: 350px; /* Increased height for better visibility */
+            margin-top: 1rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 0.5rem;
+        }
+
+        /* Responsive adjustments for delta analysis */
+        @media (max-width: 768px) {
+            .delta-analysis {
+                padding: 0.5rem;
+            }
+            
+            .delta-analysis .metric-card {
+                padding: 0.5rem;
+            }
+            
+            .delta-analysis .metric-value {
+                font-size: 1.1rem;
+            }
+            
+            .chart-container {
+                height: 300px;
+            }
+        }
+
+    </style>
+</head>
+<body>
+    <header class="dashboard-header">
+        <h1 class="dashboard-title">📊 Order Flow Dashboard</h1>
+        <div class="connection-status">
+            <div class="status-dot"></div>
+            <span id="connectionStatus">Ready</span>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <!-- Controls -->
+        <div class="card controls">
+            <h2 class="card-title">🎛️ Controls</h2>
+            <div class="control-group">
+                <label class="control-label">Select Stock</label>
+                <select id="securityIdDropdown">
+                    <option value="">Loading stocks...</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Exchange</label>
+                <select id="exchange">
+                    <option value="NSE_EQ">NSE Equity</option>
+                    <option value="NSE_FO" selected>NSE F&O</option>
+                    <option value="BSE_EQ">BSE Equity</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label class="control-label">Update Interval (sec)</label>
+                <input type="number" id="interval" value="2" min="1" max="60">
+            </div>
+            <button onclick="toggleMonitoring()" id="toggleBtn">Start Monitoring</button>
+        </div>
+
+        <!-- Key Metrics -->
+        <div class="card">
+            <h2 class="card-title">📈 Key Metrics</h2>
+            <div class="metric-grid">
+                <div class="metric-card">
+                    <div class="metric-value" id="ltp">0.00</div>
+                    <div class="metric-label">Last Price</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="imbalanceRatio">1.00</div>
+                    <div class="metric-label">Imbalance Ratio</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="netFlow">0</div>
+                    <div class="metric-label">Net Flow</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="spread">0.00</div>
+                    <div class="metric-label">Spread</div>
+                </div>
+            </div>
+            <div style="text-align: center;">
+                <span class="signal-indicator signal-neutral" id="signalIndicator">NEUTRAL FLOW</span>
+            </div>
+            <div class="timestamp" id="lastUpdate">Last Update: Never</div>
+        </div>
+
+        <!-- Order Flow Chart -->
+        <div class="card">
+            <h2 class="card-title">📊 Flow Timeline</h2>
+            <div class="chart-container">
+                <canvas id="flowChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Delta Bar Chart -->
+        <div class="card">
+            <h2 class="card-title">📊 Delta Bars (Bid/Ask/Net Flow)</h2>
+            <div class="chart-container">
+                <canvas id="deltaBarChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Order Book -->
+        <div class="card">
+            <h2 class="card-title">📋 Order Book</h2>
+            <div class="order-book">
+                <div class="book-side">
+                    <div class="book-header bid-header">BIDS</div>
+                    <div id="bidLevels"></div>
+                </div>
+                <div class="book-side">
+                    <div class="book-header ask-header">ASKS</div>
+                    <div id="askLevels"></div>
+                </div>
+            </div>
+            <div class="large-orders" id="largeOrders">
+                <strong>Large Orders:</strong> <span id="largeOrderText">No unusual activity</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="alert-banner" id="alertBanner"></div>
+
+    <script>
+        // Global variables
+        let isMonitoring = false;
+        let monitoringInterval = null;
+        let flowChart = null;
+        let flowData = {
+            timestamps: [],
+            imbalanceRatios: [],
+            netFlows: [],
+            signals: []
+        };
+
+        let deltaBarChart = null;
+        let currentSecurityId = null;
+
+        // API base URL - adjust if needed
+        const API_BASE = '/api';
+
+        function initializeDeltaBarChart() {
+            const ctx = document.getElementById('deltaBarChart').getContext('2d');
+            deltaBarChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Buy Volume',
+                            backgroundColor: 'rgba(0, 255, 136, 0.8)',
+                            borderColor: 'rgba(0, 255, 136, 1)',
+                            borderWidth: 1,
+                            data: [],
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Sell Volume',
+                            backgroundColor: 'rgba(255, 71, 87, 0.8)',
+                            borderColor: 'rgba(255, 71, 87, 1)',
+                            borderWidth: 1,
+                            data: [],
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Volume Delta',
+                            type: 'line',
+                            backgroundColor: 'rgba(255, 193, 7, 0.2)',
+                            borderColor: 'rgba(255, 193, 7, 1)',
+                            borderWidth: 2,
+                            data: [],
+                            yAxisID: 'y1',
+                            tension: 0.4,
+                            fill: false
+                        },
+                        {
+                            label: 'Cumulative Delta',
+                            type: 'line',
+                            backgroundColor: 'rgba(156, 39, 176, 0.2)',
+                            borderColor: 'rgba(156, 39, 176, 1)',
+                            borderWidth: 3,
+                            data: [],
+                            yAxisID: 'y2',
+                            tension: 0.2,
+                            fill: false,
+                            pointRadius: 0,
+                            pointHoverRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Order Flow Analysis - Volume Delta & Cumulative Delta',
+                            color: '#ffffff',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            }
+                        },
+                        legend: {
+                            labels: { 
+                                color: '#ffffff',
+                                usePointStyle: true,
+                                padding: 15
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: '#ffffff',
+                            bodyColor: '#ffffff',
+                            borderColor: 'rgba(255, 255, 255, 0.3)',
+                            borderWidth: 1,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.dataset.label === 'Buy Volume' || context.dataset.label === 'Sell Volume') {
+                                        label += context.parsed.y.toLocaleString();
+                                    } else {
+                                        label += context.parsed.y.toFixed(0);
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: false,
+                            ticks: { 
+                                color: '#ffffff',
+                                maxRotation: 45,
+                                minRotation: 45
+                            },
+                            grid: { 
+                                color: 'rgba(255, 255, 255, 0.1)',
+                                drawOnChartArea: true
+                            }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            stacked: false,
+                            title: {
+                                display: true,
+                                text: 'Volume',
+                                color: '#ffffff'
+                            },
+                            ticks: { 
+                                color: '#ffffff',
+                                callback: function(value) {
+                                    return value.toLocaleString();
+                                }
+                            },
+                            grid: { 
+                                color: 'rgba(255, 255, 255, 0.1)',
+                                drawOnChartArea: true
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: 'Volume Delta',
+                                color: '#ffc107'
+                            },
+                            ticks: { 
+                                color: '#ffc107',
+                                callback: function(value) {
+                                    return (value >= 0 ? '+' : '') + value.toFixed(0);
+                                }
+                            },
+                            grid: { 
+                                drawOnChartArea: false
+                            }
+                        },
+                        y2: {
+                            type: 'linear',
+                            display: false, // Hidden but used for cumulative delta
+                            position: 'right'
+                        }
+                    },
+                    elements: {
+                        bar: {
+                            borderSkipped: false,
+                            borderRadius: 2
+                        }
+                    }
+                }
+            });
+        }
+
+        async function fetchDeltaData() {
+            if (!currentSecurityId) return;
+            try {
+                const response = await fetch(`${API_BASE}/delta_data/${currentSecurityId}`);
+                if (!response.ok) return;
+
+                const data = await response.json();
+                
+                // Process data for volume delta analysis
+                const processedData = data.map((item, index) => {
+                    const buyVolume = item.buy_volume || Math.abs(item.bid_delta) || 0;
+                    const sellVolume = item.sell_volume || Math.abs(item.ask_delta) || 0;
+                    const volumeDelta = buyVolume - sellVolume;
+                    
+                    return {
+                        timestamp: new Date(item.timestamp).toLocaleTimeString(),
+                        buyVolume: buyVolume,
+                        sellVolume: -sellVolume, // Negative for visual stacking
+                        volumeDelta: volumeDelta,
+                        cumulativeDelta: 0 // Will be calculated
+                    };
+                });
+
+                // Calculate cumulative delta
+                let cumulativeDelta = 0;
+                processedData.forEach(item => {
+                    cumulativeDelta += item.volumeDelta;
+                    item.cumulativeDelta = cumulativeDelta;
+                });
+
+                // Limit to last 50 data points for performance
+                const limitedData = processedData.slice(-50);
+
+                // Update chart
+                deltaBarChart.data.labels = limitedData.map(d => d.timestamp);
+                deltaBarChart.data.datasets[0].data = limitedData.map(d => d.buyVolume);
+                deltaBarChart.data.datasets[1].data = limitedData.map(d => d.sellVolume);
+                deltaBarChart.data.datasets[2].data = limitedData.map(d => d.volumeDelta);
+                deltaBarChart.data.datasets[3].data = limitedData.map(d => d.cumulativeDelta);
+
+                // Update y2 axis range for cumulative delta
+                const maxCumDelta = Math.max(...limitedData.map(d => Math.abs(d.cumulativeDelta)));
+                deltaBarChart.options.scales.y2.min = -maxCumDelta * 1.1;
+                deltaBarChart.options.scales.y2.max = maxCumDelta * 1.1;
+
+                deltaBarChart.update('none');
+                
+                // Update the delta analysis text
+                const latestDelta = limitedData[limitedData.length - 1];
+                if (latestDelta) {
+                    updateDeltaAnalysis(latestDelta);
+                }
+                
+            } catch (error) {
+                console.error("Error fetching delta data:", error);
+            }
+        }
+
+        // Add this new function to update delta analysis display
+        function updateDeltaAnalysis(deltaData) {
+            // Create or update delta analysis info
+            let deltaInfo = document.getElementById('deltaAnalysis');
+            if (!deltaInfo) {
+                // Create delta analysis section
+                const deltaCard = document.querySelector('.card h2.card-title').parentElement;
+                deltaInfo = document.createElement('div');
+                deltaInfo.id = 'deltaAnalysis';
+                deltaInfo.className = 'delta-analysis';
+                deltaInfo.innerHTML = `
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1rem; margin-top: 1rem; padding: 1rem; background: rgba(255, 255, 255, 0.05); border-radius: 12px;">
+                        <div class="metric-card">
+                            <div class="metric-value" id="currentDelta">0</div>
+                            <div class="metric-label">Current Delta</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value" id="cumDelta">0</div>
+                            <div class="metric-label">Cumulative Δ</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value" id="deltaStrength">Neutral</div>
+                            <div class="metric-label">Delta Strength</div>
+                        </div>
+                    </div>
+                `;
+                deltaCard.appendChild(deltaInfo);
+            }
+
+            // Update values
+            document.getElementById('currentDelta').textContent = deltaData.volumeDelta.toFixed(0);
+            document.getElementById('cumDelta').textContent = deltaData.cumulativeDelta.toFixed(0);
+            
+            // Determine delta strength
+            const deltaStrength = Math.abs(deltaData.cumulativeDelta) > 10000 ? 
+                (deltaData.cumulativeDelta > 0 ? 'Strong Buy' : 'Strong Sell') : 'Neutral';
+            const strengthElement = document.getElementById('deltaStrength');
+            strengthElement.textContent = deltaStrength;
+            
+            // Color coding for delta strength
+            if (deltaStrength === 'Strong Buy') {
+                strengthElement.style.color = '#00ff88';
+            } else if (deltaStrength === 'Strong Sell') {
+                strengthElement.style.color = '#ff4757';
+            } else {
+                strengthElement.style.color = '#ffc107';
+            }
+        }
+
+        // Enhanced chart update function with volume delta support
+        function updateChartWithVolumeData(marketData) {
+            // Extract volume data from market data
+            const buyVolume = marketData.buy_quantity || 0;
+            const sellVolume = marketData.sell_quantity || 0;
+            const volumeDelta = buyVolume - sellVolume;
+            
+            // Add to historical data
+            const timestamp = new Date().toLocaleTimeString();
+            
+            // Update the delta chart with real-time data
+            if (deltaBarChart && deltaBarChart.data.labels.length > 0) {
+                const currentData = {
+                    timestamp: timestamp,
+                    buyVolume: buyVolume,
+                    sellVolume: -sellVolume,
+                    volumeDelta: volumeDelta,
+                    cumulativeDelta: 0 // Calculate based on previous
+                };
+                
+                // Get previous cumulative delta
+                const prevCumDelta = deltaBarChart.data.datasets[3].data.slice(-1)[0] || 0;
+                currentData.cumulativeDelta = prevCumDelta + volumeDelta;
+                
+                // Add new data point
+                deltaBarChart.data.labels.push(currentData.timestamp);
+                deltaBarChart.data.datasets[0].data.push(currentData.buyVolume);
+                deltaBarChart.data.datasets[1].data.push(currentData.sellVolume);
+                deltaBarChart.data.datasets[2].data.push(currentData.volumeDelta);
+                deltaBarChart.data.datasets[3].data.push(currentData.cumulativeDelta);
+                
+                // Keep only last 50 points
+                if (deltaBarChart.data.labels.length > 50) {
+                    deltaBarChart.data.labels.shift();
+                    deltaBarChart.data.datasets.forEach(dataset => dataset.data.shift());
+                }
+                
+                deltaBarChart.update('none');
+                updateDeltaAnalysis(currentData);
+            }
+        }
+
+        // Initialize chart
+        function initializeChart() {
+            const ctx = document.getElementById('flowChart').getContext('2d');
+            flowChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Imbalance Ratio',
+                        data: [],
+                        borderColor: '#00d4aa',
+                        backgroundColor: 'rgba(0, 212, 170, 0.1)',
+                        tension: 0.4,
+                        yAxisID: 'y'
+                    }, {
+                        label: 'Net Flow',
+                        data: [],
+                        borderColor: '#00a8ff',
+                        backgroundColor: 'rgba(0, 168, 255, 0.1)',
+                        tension: 0.4,
+                        yAxisID: 'y1'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#ffffff'
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#ffffff' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            ticks: { color: '#ffffff' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            ticks: { color: '#ffffff' },
+                            grid: { drawOnChartArea: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 3. Update the fetchCurrentData function to handle API errors better
+        async function fetchCurrentData() {
+            try {
+                const response = await fetch(`${API_BASE}/current_data`);
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Current data received:', data);
+                    
+                    // Check if we have actual data (not empty object)
+                    if (data && (data.data || Object.keys(data).length > 0)) {
+                        updateDashboard(data);
+                    } else {
+                        console.warn('⚠️  Empty or invalid data received from server');
+                        // Update connection status to show issue
+                        document.getElementById('connectionStatus').textContent = 'No Data';
+                    }
+                } else {
+                    console.error('❌ Failed to fetch current data:', response.status, response.statusText);
+                    document.getElementById('connectionStatus').textContent = 'API Error';
+                }
+            } catch (error) {
+                console.error('❌ Error fetching data:', error);
+                document.getElementById('connectionStatus').textContent = 'Connection Error';
+            }
+        }
+
+        // 1. Update the updateDashboard function to handle nested data structure
+        // Enhanced updateDashboard function with volume delta integration
+        function updateDashboard(data) {
+            console.log('Raw data received:', data);
+            
+            // Handle nested data structure from Dhan API
+            let processedData = data;
+            if (data.data && data.data.data) {
+                // Extract the actual market data from nested structure
+                const exchanges = Object.keys(data.data.data);
+                if (exchanges.length > 0) {
+                    const exchange = exchanges[0];
+                    const securities = Object.keys(data.data.data[exchange]);
+                    if (securities.length > 0) {
+                        const securityData = data.data.data[exchange][securities[0]];
+                        processedData = {
+                            ltp: securityData.last_price,
+                            imbalanceRatio: calculateImbalanceRatio(securityData),
+                            netFlow: calculateNetFlow(securityData),
+                            spread: calculateSpread(securityData),
+                            timestamp: new Date().toLocaleTimeString(),
+                            signal: determineSignal(securityData),
+                            orderBook: {
+                                bids: securityData.depth?.buy || [],
+                                asks: securityData.depth?.sell || []
+                            },
+                            largeOrders: analyzeLargeOrders(securityData),
+                            // Add volume data for delta analysis
+                            buy_quantity: securityData.buy_quantity || 0,
+                            sell_quantity: securityData.sell_quantity || 0,
+                            volume: securityData.volume || 0,
+                            // Calculate additional metrics
+                            volumeWeightedPrice: calculateVWAP(securityData),
+                            orderFlowImbalance: calculateOrderFlowImbalance(securityData)
+                        };
+                    }
+                }
+            }
+            
+            // Update metrics with processed data
+            document.getElementById('ltp').textContent = processedData.ltp?.toFixed(2) || '0.00';
+            document.getElementById('imbalanceRatio').textContent = processedData.imbalanceRatio?.toFixed(2) || '1.00';
+            document.getElementById('netFlow').textContent = processedData.netFlow?.toFixed(0) || '0';
+            document.getElementById('spread').textContent = processedData.spread?.toFixed(3) || '0.000';
+            document.getElementById('lastUpdate').textContent = `Last Update: ${processedData.timestamp || 'Never'}`;
+
+            // Update signal indicator with enhanced logic
+            const signalElement = document.getElementById('signalIndicator');
+            const signal = processedData.signal || 'NEUTRAL_FLOW';
+            signalElement.textContent = signal.replace('_', ' ');
+            signalElement.className = `signal-indicator signal-${signal.toLowerCase().split('_')[0]}`;
+
+            // Update order book
+            if (processedData.orderBook) {
+                updateOrderBook(processedData.orderBook);
+            }
+
+            // Update large orders with enhanced detection
+            if (processedData.largeOrders) {
+                const largeOrderText = processedData.largeOrders.largeBids + processedData.largeOrders.largeAsks > 0 
+                    ? `${processedData.largeOrders.largeBids} large bids, ${processedData.largeOrders.largeAsks} large asks`
+                    : 'No unusual activity';
+                document.getElementById('largeOrderText').textContent = largeOrderText;
+            }
+
+            // Update regular flow chart
+            updateChart(processedData);
+
+            // Update volume delta chart with real-time data
+            updateChartWithVolumeData(processedData);
+
+            // Enhanced alert system
+            if (signal !== 'NEUTRAL_FLOW') {
+                const alertMessage = `${signal.replace('_', ' ')} detected - Volume: ${processedData.volume?.toLocaleString() || 'N/A'}`;
+                showAlert(alertMessage, signal);
+            }
+
+            // Check for volume spikes
+            if (processedData.volume && processedData.volume > 100000) {
+                showAlert(`High Volume Alert: ${processedData.volume.toLocaleString()} shares`, 'VOLUME_SPIKE');
+            }
+        }
+
+        // Helper function to calculate VWAP
+        function calculateVWAP(securityData) {
+            if (!securityData.volume || !securityData.last_price) return 0;
+            
+            // Simplified VWAP calculation - in real implementation, you'd track cumulative volume and price*volume
+            return securityData.last_price; // Placeholder
+        }
+
+        // Enhanced order flow imbalance calculation
+        function calculateOrderFlowImbalance(securityData) {
+            if (!securityData.depth || !securityData.depth.buy || !securityData.depth.sell) {
+                return 0;
+            }
+            
+            // Calculate weighted imbalance based on top 3 levels
+            const bidLevels = securityData.depth.buy.slice(0, 3);
+            const askLevels = securityData.depth.sell.slice(0, 3);
+            
+            const bidVolume = bidLevels.reduce((sum, level) => sum + (level.quantity || 0), 0);
+            const askVolume = askLevels.reduce((sum, level) => sum + (level.quantity || 0), 0);
+            
+            return bidVolume - askVolume;
+        }
+
+        // Enhanced signal determination with volume consideration
+        function determineSignal(securityData) {
+            const imbalanceRatio = calculateImbalanceRatio(securityData);
+            const netFlow = calculateNetFlow(securityData);
+            const volume = securityData.volume || 0;
+            const orderFlowImbalance = calculateOrderFlowImbalance(securityData);
+            
+            // Volume-weighted signal determination
+            const volumeThreshold = 50000; // Adjust based on your asset
+            const isHighVolume = volume > volumeThreshold;
+            
+            if (imbalanceRatio > 1.5 && netFlow > 1000 && (isHighVolume || orderFlowImbalance > 5000)) {
+                return 'BULLISH_FLOW';
+            } else if (imbalanceRatio < 0.7 && netFlow < -1000 && (isHighVolume || orderFlowImbalance < -5000)) {
+                return 'BEARISH_FLOW';
+            } else if (isHighVolume && Math.abs(orderFlowImbalance) > 10000) {
+                return orderFlowImbalance > 0 ? 'BULLISH_FLOW' : 'BEARISH_FLOW';
+            } else {
+                return 'NEUTRAL_FLOW';
+            }
+        }
+
+        function analyzeLargeOrders(securityData) {
+            if (!securityData.depth) {
+                return { largeBids: 0, largeAsks: 0 };
+            }
+            
+            const largeBids = (securityData.depth.buy || []).filter(order => order.quantity > 500).length;
+            const largeAsks = (securityData.depth.sell || []).filter(order => order.quantity > 500).length;
+            
+            return { largeBids, largeAsks };
+        }
+
+        // Update order book display
+        function updateOrderBook(orderBook) {
+            const bidLevels = document.getElementById('bidLevels');
+            const askLevels = document.getElementById('askLevels');
+
+            if (orderBook.bids) {
+                bidLevels.innerHTML = orderBook.bids.map(level => `
+                    <div class="book-row">
+                        <div class="price" style="color: #00ff88">${parseFloat(level.price).toFixed(2)}</div>
+                        <div class="quantity">${level.quantity}</div>
+                    </div>
+                `).join('');
+            }
+
+            if (orderBook.asks) {
+                askLevels.innerHTML = orderBook.asks.map(level => `
+                    <div class="book-row">
+                        <div class="price" style="color: #ff4757">${parseFloat(level.price).toFixed(2)}</div>
+                        <div class="quantity">${level.quantity}</div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        // Update chart with new data
+        function updateChart(data) {
+            const maxDataPoints = 50;
+            
+            flowData.timestamps.push(data.timestamp || new Date().toLocaleTimeString());
+            flowData.imbalanceRatios.push(data.imbalanceRatio || 1.0);
+            flowData.netFlows.push(data.netFlow || 0);
+
+            // Keep only last N data points
+            if (flowData.timestamps.length > maxDataPoints) {
+                flowData.timestamps.shift();
+                flowData.imbalanceRatios.shift();
+                flowData.netFlows.shift();
+            }
+
+            flowChart.data.labels = flowData.timestamps;
+            flowChart.data.datasets[0].data = flowData.imbalanceRatios;
+            flowChart.data.datasets[1].data = flowData.netFlows;
+            flowChart.update('none');
+        }
+
+        // Show alert banner
+        function showAlert(message, type) {
+            const alertBanner = document.getElementById('alertBanner');
+            alertBanner.textContent = message;
+            alertBanner.className = `alert-banner signal-${type.toLowerCase().split('_')[0]} show`;
+            
+            setTimeout(() => {
+                alertBanner.classList.remove('show');
+            }, 3000);
+        }
+
+        // Toggle monitoring
+        async function toggleMonitoring() {
+            const toggleBtn = document.getElementById('toggleBtn');
+            const connectionStatus = document.getElementById('connectionStatus');
+
+            if (!isMonitoring) {
+                // Start monitoring
+                const securityId = document.getElementById('securityIdDropdown').value;
+                const exchange = document.getElementById('exchange').value;
+                const interval = parseInt(document.getElementById('interval').value);
+
+                if (!securityId) {
+                    alert('Please select a stock first!');
+                    return;
+                }
+
+                console.log(`🚀 Starting monitoring: Security=${securityId}, Exchange=${exchange}, Interval=${interval}`);
+
+                try {
+                    const response = await fetch(`${API_BASE}/start_monitoring`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            security_id: securityId,
+                            exchange: exchange,
+                            interval: interval
+                        })
+                    });
+
+                    const result = await response.json();
+                    console.log('Start monitoring response:', result);
+
+                    if (response.ok) {
+                        isMonitoring = true;
+                        toggleBtn.textContent = 'Stop Monitoring';
+                        toggleBtn.style.background = 'linear-gradient(45deg, #ff4757, #ff3742)';
+                        connectionStatus.textContent = `Monitoring ${exchange}`;
+
+                        // Start polling for data
+                        monitoringInterval = setInterval(fetchCurrentData, interval * 1000);
+                        currentSecurityId = String(securityId);
+                        setInterval(fetchDeltaData, 60000);
+
+                        console.log('✅ Monitoring started successfully');
+                    } else {
+                        throw new Error(result.message || 'Failed to start monitoring');
+                    }
+                } catch (error) {
+                    console.error('❌ Error starting monitoring:', error);
+                    alert(`Failed to start monitoring: ${error.message}`);
+                }
+            } else {
+                // Stop monitoring
+                try {
+                    const response = await fetch(`${API_BASE}/stop_monitoring`, {
+                        method: 'POST'
+                    });
+
+                    if (response.ok) {
+                        clearInterval(monitoringInterval);
+                        isMonitoring = false;
+                        toggleBtn.textContent = 'Start Monitoring';
+                        toggleBtn.style.background = 'linear-gradient(45deg, #00d4aa, #00a8ff)';
+                        connectionStatus.textContent = 'Stopped';
+                    }
+                } catch (error) {
+                    console.error('Error stopping monitoring:', error);
+                }
+            }
+        }
+
+        // Load stock list from API
+        async function loadStockList() {
+            const dropdown = document.getElementById('securityIdDropdown');
+            
+            try {
+                console.log('🔄 Loading stock list from API...');
+                const response = await fetch(`${API_BASE}/stocks`);
+                
+                if (response.ok) {
+                    const stocks = await response.json();
+                    console.log('✅ Loaded stocks from API:', stocks.length);
+                    
+                    // Clear existing options
+                    dropdown.innerHTML = '<option value="">Select a stock...</option>';
+                    
+                    // Add stock options
+                    stocks.forEach(stock => {
+                        const option = document.createElement('option');
+                        option.value = stock.security_id;
+                        option.textContent = `${stock.symbol} (${stock.security_id})`;
+                        dropdown.appendChild(option);
+                    });
+                    
+                    console.log('✅ Stock dropdown populated successfully');
+                } else {
+                    throw new Error(`API returned ${response.status}: ${response.statusText}`);
+                }
+            } catch (err) {
+                console.error("❌ Error loading stock list from API:", err);
+                dropdown.innerHTML = '<option value="">Error loading stocks</option>';
+                alert(`Could not load stock list: ${err.message}\nPlease ensure your Flask server is running and stock_list.csv exists.`);
+            }
+        }
+
+        // Initialize dashboard when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function () {
+            console.log('🚀 Dashboard initializing...');
+            initializeChart();
+            initializeDeltaBarChart();
+            loadStockList();
+            console.log('✅ Dashboard initialized');
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            if (flowChart) {
+                flowChart.resize();
+            }
+            if (deltaBarChart) {
+                deltaBarChart.resize();
+            }
+        });
+    </script>
+</body>
+</html>
