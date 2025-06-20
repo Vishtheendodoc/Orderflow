@@ -1,4 +1,5 @@
 Flask
 flask-cors
 pandas
-dhanhq
+git+https://github.com/dhan-oss/DhanHQ-py.git@main#egg=dhanhq
+
